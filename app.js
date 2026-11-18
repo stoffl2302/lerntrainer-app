@@ -67,7 +67,7 @@ function renderTop() {
   $('#top').classList.toggle('hide', !ME);
   if (!ME) return;
   $('#who').textContent = ME.name || '';
-  if (window.LT_OFFLINE) { $('#menu').innerHTML = '<a href="#/">Fächer</a><a href="#/sicherung">Sicherung & Inhalte</a><a href="#/hilfe">Hilfe</a>'; return; }
+  if (window.LT_OFFLINE) { $('#menu').innerHTML = '<a href="#/">Fächer</a><a href="#/sicherung">Abgleich, Sicherung & Inhalte</a><a href="#/hilfe">Hilfe</a>'; return; }
   $('#menu').innerHTML = `<a href="#/">Fächer</a><a href="#/profil">Mein Konto</a>${ME.role === 'admin' ? '<a href="#/verwaltung">Verwaltung</a>' : ''}<a href="#/hilfe">Hilfe</a><button id="logout">Abmelden</button>`;
   $('#logout').onclick = async () => { await api('POST', '/api/logout', {}).catch(() => {}); ME = null; location.hash = '#/'; route(); };
 }
@@ -115,7 +115,7 @@ async function viewHome() {
   let cont = '';
   if (lastSet) for (const s of f) for (const st of s.sets) if (st.id === lastSet) cont = `<a class="card tile" href="#/${st.type === 'mc' ? 'mc' : 'karten'}/${st.id}" style="border-color:var(--pri)"><div class="info">Weiter lernen</div><div class="name">${esc(s.name)} · ${esc(st.title)}</div>${progressBar(st)}</a>`;
   setView(`<h1>Hallo${ME.name ? ' ' + esc(ME.name) : ''}</h1>
-    <p class="sub">${d.heute ? `Heute schon ${d.heute} Fragen geübt.` : 'Heute noch nichts geübt.'}${d.streak > 1 ? ` · ${d.streak} Tage in Folge gelernt` : ''}</p>
+    <p class="sub">${d.heute ? `Heute schon ${d.heute} Fragen geübt.` : 'Heute noch nichts geübt.'}${d.streak > 1 ? ` · ${d.streak} Tage in Folge gelernt` : ''}${window.LTSync?.enabled() ? (window.LTSync.signedIn() ? ' · <a href="#/sicherung" style="color:inherit">abgeglichen ✓</a>' : ' · <a href="#/sicherung">Abgleich einrichten</a>') : ''}</p>
     ${installBox()}${cont}
     <h2>Fach wählen</h2>
     ${f.length ? `<div class="grid">${f.map(s => {
@@ -546,22 +546,64 @@ function viewHilfe() {
 
 function viewNotFound() { setView('<div class="card empty">Seite nicht gefunden. <a href="#/">Zu den Fächern</a></div>'); }
 
+// ---------- Automatischer Abgleich (Firebase) ----------
+const fmtTime = t => new Date(t).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+function syncCard() {
+  const S = window.LTSync;
+  if (!S || !S.enabled()) return '';
+  if (!S.signedIn()) return `<div class="card" style="border-color:var(--pri)"><h2 style="margin-top:0">Automatischer Abgleich</h2>
+    <p class="sub">Einmal pro Gerät anmelden, dann ist dein Fortschritt auf Handy und Tablet automatisch gleich. Lernen geht auch offline, abgeglichen wird, sobald wieder Internet da ist.</p>
+    <form id="sf"><label class="f"><span>E-Mail</span><input type="text" name="email" inputmode="email" autocomplete="username" autocapitalize="none" required></label>
+    <label class="f"><span>Passwort</span><input type="password" name="password" autocomplete="current-password" required></label>
+    <div id="sm"></div><div class="btns"><button class="pri">Anmelden</button></div></form></div>`;
+  const i = S.info(), stt = S.status();
+  const line = stt.state === 'busy' ? 'Gleiche gerade ab …' : stt.state === 'error' || stt.state === 'offline' ? esc(stt.msg) : i.last ? 'Zuletzt abgeglichen: ' + fmtTime(i.last) : 'Noch nicht abgeglichen.';
+  return `<div class="card" style="border-color:var(--pri)"><h2 style="margin-top:0">Automatischer Abgleich ✓</h2>
+    <p class="sub">Angemeldet als <strong>${esc(i.email)}</strong>. Dein Fortschritt wird nach dem Lernen automatisch mit deinen anderen Geräten abgeglichen.</p>
+    <div class="msg ${stt.state === 'error' ? 'err' : 'info'}" id="sline">${line}</div>
+    <div class="btns"><button id="snow">Jetzt abgleichen</button><button class="ghost sm" id="sout">Abmelden</button></div></div>`;
+}
+function wireSync() {
+  const S = window.LTSync;
+  if (!S || !S.enabled()) return;
+  const f = $('#sf');
+  if (f) f.onsubmit = async e => {
+    e.preventDefault();
+    const b = f.querySelector('button'); b.disabled = true; b.textContent = 'Melde an …';
+    try { await S.login(f.email.value.trim(), f.password.value); viewSicherung(); }
+    catch (err) { showMsg($('#sm'), err instanceof TypeError ? 'Keine Verbindung. Bitte Internet prüfen.' : err.message); b.disabled = false; b.textContent = 'Anmelden'; }
+  };
+  const n = $('#snow'); if (n) n.onclick = async () => { await S.syncNow(); if (location.hash === '#/sicherung') viewSicherung(); };
+  const o = $('#sout'); if (o) confirmBtn(o, 'Wirklich abmelden?', () => { S.logout(); viewSicherung(); });
+}
+if (window.LTSync) {
+  window.LTSync.onStatus(stt => {
+    const l = $('#sline'); if (!l) return;
+    const i = window.LTSync.info();
+    l.className = 'msg ' + (stt.state === 'error' ? 'err' : 'info');
+    l.textContent = stt.state === 'busy' ? 'Gleiche gerade ab …' : stt.state === 'error' || stt.state === 'offline' ? stt.msg : i.last ? 'Zuletzt abgeglichen: ' + fmtTime(i.last) : 'Noch nicht abgeglichen.';
+  });
+  // neue Daten vom anderen Gerät: Übersichten neu zeichnen (nicht mitten im Lernen)
+  window.addEventListener('lt-synced', () => { const h = location.hash || '#/'; if (h === '#/' || /^#\/fach\//.test(h)) route(); });
+}
+
 // ---------- Offline: Sicherung und eigene Inhalte ----------
 function viewSicherung() {
   const L = window.LocalApi, st = L.stats(), cs = L.customSets();
   const last = store.get('lastBackup', 0);
   setView(`<h1>Sicherung & Inhalte</h1>
-    <div class="card"><h2 style="margin-top:0">Fortschritt abgleichen und sichern</h2>
+    ${syncCard()}
+    <div class="card"><h2 style="margin-top:0">${window.LTSync?.enabled() ? 'Als Datei sichern' : 'Fortschritt abgleichen und sichern'}</h2>
       <p class="sub">Dein Fortschritt (${st.progress} geübte Fragen und Karten) liegt auf diesem Gerät. ${last ? 'Zuletzt gespeichert: ' + new Date(last).toLocaleString('de-AT', { dateStyle: 'short', timeStyle: 'short' }) + '.' : 'Noch nie gespeichert.'}</p>
       <div class="btns"><button class="pri" id="bk">Fortschritt speichern</button><button id="rs">Fortschritt einlesen</button><input type="file" id="rsf" accept=".json,application/json" hidden></div>
       <div id="bm"></div>
-      <details><summary>Handy und Tablet abgleichen (iCloud Drive)</summary>
+      ${window.LTSync?.enabled() && window.LTSync.signedIn() ? '' : `<details><summary>Handy und Tablet abgleichen (iCloud Drive)</summary>
         <ol class="sub" style="padding-left:1.3em">
           <li>Auf dem Gerät, wo du gelernt hast: <strong>Fortschritt speichern</strong> → „In Dateien sichern“ → <strong>iCloud Drive</strong> (am besten immer in denselben Ordner, alte Datei ersetzen).</li>
           <li>Auf dem anderen Gerät: <strong>Fortschritt einlesen</strong> → die Datei aus iCloud Drive wählen.</li>
         </ol>
         <p class="sub">Beim Einlesen wird nichts überschrieben: Der Stand beider Geräte wird zusammengeführt, pro Frage gilt der neuere. Gleichzeitig ist es auch deine Sicherung.</p>
-      </details></div>
+      </details>`}</div>
     <div class="card"><h2 style="margin-top:0">Eigene Inhalte hinzufügen</h2>
       <p class="sub">Markdown- oder JSON-Datei mit Fragen oder Karteikarten öffnen. Gleiches Fach und gleicher Titel ersetzt das vorhandene Lernset, der Fortschritt bei gleichen Fragen bleibt.</p>
       <label class="f"><span>Fach (nur nötig, wenn es nicht in der Datei steht)</span><input type="text" id="impFach"></label>
@@ -570,6 +612,7 @@ function viewSicherung() {
       ${cs.length ? '<h3>Von dir hinzugefügt</h3>' + cs.map((c, i) => `<div class="li"><div class="t"><strong>${esc(c.fach)}</strong> · ${esc(c.title)}<br><small class="sub">${c.type === 'mc' ? 'Multiple Choice' : 'Karteikarten'} · ${c.n} Einträge${c.overrides ? ' · ersetzt die mitgelieferte Version' : ''}</small></div><div class="a"><button class="sm danger" data-rm="${i}">Entfernen</button></div></div>`).join('') : ''}
       <details><summary>Dateiformat anzeigen</summary>${formatHelp()}</details></div>
     <div class="card"><h2 style="margin-top:0">Dein Name</h2><form id="nf"><label class="f"><span>Für die Begrüßung</span><input type="text" name="name" value="${esc(ME.name || '')}"></label><div id="nm"></div><div class="btns"><button class="pri">Speichern</button></div></form></div>`);
+  wireSync();
   $('#bk').onclick = async () => {
     const data = JSON.stringify(L.backup(), null, 1);
     const name = 'lerntrainer-fortschritt.json';
@@ -648,6 +691,7 @@ async function route() {
   } catch (e) { if (ME) setView(`<div class="msg err">${esc(e.message)}</div><a href="#/">Zu den Fächern</a>`); }
 }
 async function boot() {
+  if (window.LTSync) await window.LTSync.ready;
   try { const st = await api('GET', '/api/status'); ME = st.user; if (!ME) { renderTop(); return viewAuth(st); } route(); }
   catch (e) { setView(`<div class="msg err">Keine Verbindung zum Lerntrainer. Bitte Internet bzw. WLAN prüfen und neu laden.</div><div class="btns"><button class="pri" onclick="location.reload()">Neu laden</button></div>`); }
 }
