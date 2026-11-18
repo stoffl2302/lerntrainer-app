@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f5f99">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lerntrainer">
+<title>Lerntrainer</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top hide" id="top"><div class="in">
+  <a class="logo" href="#/"><img src="icon.svg" alt="" width="26" height="26">Lerntrainer</a>
+  <span class="sp"></span>
+  <span class="who" id="who"></span>
+  <button class="ghost sm" id="menuBtn" aria-label="Menü" aria-haspopup="true">☰</button>
+</div></header>
+<div class="menu hide" id="menu" role="menu"></div>
+<main id="app"><p class="empty">Lade …</p></main>
+<script src="import.js"></script>
+<script src="local-api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
