@@ -132,13 +132,26 @@ window.LocalApi = (() => {
     return { app: 'lerntrainer', version: 1, created: new Date().toISOString(), name: load(K.name, ''),
       progress: load(K.prog, {}), attempts: load(K.att, []), custom: load(K.custom, []) };
   }
+  // Sicherung einlesen und mit dem Stand hier zusammenführen: pro Frage gewinnt der neuere Eintrag
   function restore(d) {
     if (!d || d.app !== 'lerntrainer' || typeof d.progress !== 'object') err('Das ist keine Sicherungsdatei vom Lerntrainer.');
-    save(K.prog, d.progress); save(K.att, Array.isArray(d.attempts) ? d.attempts : []);
-    save(K.custom, Array.isArray(d.custom) ? d.custom : []);
-    if (d.name) save(K.name, d.name);
+    const prog = load(K.prog, {});
+    let neu = 0;
+    for (const [k, p] of Object.entries(d.progress)) {
+      if (!p || typeof p.seen !== 'number') continue;
+      if (!prog[k] || p.seen > prog[k].seen) { prog[k] = p; neu++; }
+    }
+    save(K.prog, prog);
+    const att = load(K.att, []), seenAtt = new Set(att.map(a => a.skey + '|' + a.at));
+    for (const a of Array.isArray(d.attempts) ? d.attempts : []) if (!seenAtt.has(a.skey + '|' + a.at)) att.push(a);
+    att.sort((a, b) => a.at - b.at); save(K.att, att.slice(-500));
+    const custom = load(K.custom, []);
+    for (const c of Array.isArray(d.custom) ? d.custom : [])
+      if (!custom.some(x => x.fach === c.fach && x.title === c.title && x.type === c.type)) custom.push(c);
+    save(K.custom, custom);
+    if (d.name && !load(K.name, '')) save(K.name, d.name);
     build();
-    return Object.keys(d.progress).length;
+    return neu;
   }
   function importFile(text, fileName, fach) {
     const d = window.LTImport.parse(text, fileName, { fach });

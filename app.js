@@ -540,7 +540,7 @@ function viewHilfe() {
     <p>„Schwierige und neue Fragen bevorzugen“ zieht öfter Fragen, die du noch nie hattest oder oft falsch hattest. Eine Frage gilt als <strong>sicher</strong>, wenn du sie zweimal hintereinander richtig hattest.</p></div>
     <div class="card"><h2 style="margin-top:0">Karteikarten</h2>
     <p>Die Karten arbeiten nach dem Karteikasten-Prinzip: Was du weißt, kommt immer später wieder (1, 3, 7, 14, 30 Tage). Was du nicht weißt, kommt in derselben Runde nochmal. So lernst du jeden Tag nur die fälligen Karten. Eine Karte gilt ab dem dritten „Gewusst“ in Folge als sicher.</p></div>
-    <div class="card"><h2 style="margin-top:0">Fortschritt</h2><p>${window.LT_OFFLINE ? 'Dein Fortschritt wird nur auf diesem Gerät gespeichert. Die App funktioniert auch ohne Internet, z. B. im Flugmodus. Mach ab und zu unter „Sicherung & Inhalte“ eine Sicherung.' : 'Dein Fortschritt wird pro Konto am Server gespeichert. Du kannst also am PC anfangen und am Handy weitermachen.'}</p></div>
+    <div class="card"><h2 style="margin-top:0">Fortschritt</h2><p>${window.LT_OFFLINE ? 'Dein Fortschritt wird nur auf diesem Gerät gespeichert. Die App funktioniert auch ohne Internet, z. B. im Flugmodus. Unter „Sicherung & Inhalte“ kannst du ihn speichern und zwischen Handy und Tablet abgleichen.' : 'Dein Fortschritt wird pro Konto am Server gespeichert. Du kannst also am PC anfangen und am Handy weitermachen.'}</p></div>
     ${ME.role === 'admin' || window.LT_OFFLINE ? `<div class="card"><h2 style="margin-top:0">Dateiformate für den Import</h2>${formatHelp()}</div>` : ''}`);
 }
 
@@ -551,10 +551,17 @@ function viewSicherung() {
   const L = window.LocalApi, st = L.stats(), cs = L.customSets();
   const last = store.get('lastBackup', 0);
   setView(`<h1>Sicherung & Inhalte</h1>
-    <div class="card"><h2 style="margin-top:0">Sicherung</h2>
-      <p class="sub">Dein Fortschritt (${st.progress} geübte Fragen und Karten) liegt nur auf diesem Handy. Wenn du die App löschst oder den Browser-Speicher leerst, ist er weg. Sichere ihn ab und zu als Datei, z. B. in Google Drive. ${last ? 'Letzte Sicherung: ' + new Date(last).toLocaleDateString('de-AT') + '.' : 'Noch keine Sicherung gemacht.'}</p>
-      <div class="btns"><button class="pri" id="bk">Sicherung speichern</button><button id="rs">Sicherung zurückholen</button><input type="file" id="rsf" accept=".json,application/json" hidden></div>
-      <div id="bm"></div></div>
+    <div class="card"><h2 style="margin-top:0">Fortschritt abgleichen und sichern</h2>
+      <p class="sub">Dein Fortschritt (${st.progress} geübte Fragen und Karten) liegt auf diesem Gerät. ${last ? 'Zuletzt gespeichert: ' + new Date(last).toLocaleString('de-AT', { dateStyle: 'short', timeStyle: 'short' }) + '.' : 'Noch nie gespeichert.'}</p>
+      <div class="btns"><button class="pri" id="bk">Fortschritt speichern</button><button id="rs">Fortschritt einlesen</button><input type="file" id="rsf" accept=".json,application/json" hidden></div>
+      <div id="bm"></div>
+      <details><summary>Handy und Tablet abgleichen (iCloud Drive)</summary>
+        <ol class="sub" style="padding-left:1.3em">
+          <li>Auf dem Gerät, wo du gelernt hast: <strong>Fortschritt speichern</strong> → „In Dateien sichern“ → <strong>iCloud Drive</strong> (am besten immer in denselben Ordner, alte Datei ersetzen).</li>
+          <li>Auf dem anderen Gerät: <strong>Fortschritt einlesen</strong> → die Datei aus iCloud Drive wählen.</li>
+        </ol>
+        <p class="sub">Beim Einlesen wird nichts überschrieben: Der Stand beider Geräte wird zusammengeführt, pro Frage gilt der neuere. Gleichzeitig ist es auch deine Sicherung.</p>
+      </details></div>
     <div class="card"><h2 style="margin-top:0">Eigene Inhalte hinzufügen</h2>
       <p class="sub">Markdown- oder JSON-Datei mit Fragen oder Karteikarten öffnen. Gleiches Fach und gleicher Titel ersetzt das vorhandene Lernset, der Fortschritt bei gleichen Fragen bleibt.</p>
       <label class="f"><span>Fach (nur nötig, wenn es nicht in der Datei steht)</span><input type="text" id="impFach"></label>
@@ -565,12 +572,12 @@ function viewSicherung() {
     <div class="card"><h2 style="margin-top:0">Dein Name</h2><form id="nf"><label class="f"><span>Für die Begrüßung</span><input type="text" name="name" value="${esc(ME.name || '')}"></label><div id="nm"></div><div class="btns"><button class="pri">Speichern</button></div></form></div>`);
   $('#bk').onclick = async () => {
     const data = JSON.stringify(L.backup(), null, 1);
-    const name = 'lerntrainer-sicherung-' + new Date().toLocaleDateString('sv-SE') + '.json';
+    const name = 'lerntrainer-fortschritt.json';
     const file = new File([data], name, { type: 'application/json' });
     try {
       if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: 'Lerntrainer-Sicherung' });
       else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
-      store.set('lastBackup', Date.now()); showMsg($('#bm'), 'Sicherung erstellt: ' + name, 'ok');
+      store.set('lastBackup', Date.now()); showMsg($('#bm'), 'Gespeichert: ' + name, 'ok');
     } catch (e) { if (e.name !== 'AbortError') showMsg($('#bm'), e.message); }
   };
   $('#rs').onclick = () => $('#rsf').click();
@@ -578,7 +585,8 @@ function viewSicherung() {
     try {
       const n = L.restore(JSON.parse(await $('#rsf').files[0].text()));
       ME.name = (await api('GET', '/api/status')).user.name; renderTop();
-      showMsg($('#bm'), `Sicherung zurückgeholt (${n} Einträge).`, 'ok');
+      $('#rsf').value = '';
+      showMsg($('#bm'), n ? `Eingelesen und zusammengeführt: ${n} Fragen und Karten übernommen.` : 'Eingelesen: Dieses Gerät war schon auf dem neuesten Stand.', 'ok');
     } catch (e) { showMsg($('#bm'), e instanceof SyntaxError ? 'Die Datei ist nicht lesbar.' : e.message); }
   };
   $('#imp').onclick = () => $('#impf').click();

@@ -1,5 +1,5 @@
 // Service Worker: App funktioniert offline. Bei Internet wird immer die neueste Version geholt.
-const CACHE = 'lerntrainer-c320926251';
+const CACHE = 'lerntrainer-968775a851';
 const SHELL = ['./', 'index.html', 'app.js', 'style.css', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png',
   'manifest.webmanifest', 'local-api.js', 'import.js', 'inhalte.json'];
 self.addEventListener('install', e => {
